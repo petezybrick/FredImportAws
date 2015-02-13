@@ -27,6 +27,7 @@ import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.postgresql.util.PSQLException;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
@@ -222,11 +223,12 @@ public class TsvsToRedshift {
 		Statement statement = null;
 		
 		try {
-			String tableName = "tbfred";
+			String tableName = properties.getProperty("tableNameFred").trim();
 			con = DriverManager.getConnection( jdbcRedshiftUrl, jdbcRedshiftLogin, jdbcRedshiftPassword);
 			statement = con.createStatement();
+			createDatabase( statement );	// just in case...
 			// Drop/Create table (more efficient than deleting all of the rows)
-			statement.execute( "DROP TABLE " + tableName );
+			dropTable( statement, tableName );
 			statement.execute( createTableStatement( tableName ) );
 
 			long beforeCopy = System.currentTimeMillis();
@@ -256,6 +258,38 @@ public class TsvsToRedshift {
 		}	
 	}
 	
+	
+	/**
+	 * Creates the database.
+	 *
+	 * @param statement the statement
+	 * @throws Exception the exception
+	 */
+	private void createDatabase( Statement statement ) throws Exception {
+		// Create the database, just in case it doesn't already exist
+		String databaseNameFred =  properties.getProperty( "databaseNameFred" ).trim();
+		try {
+			statement.execute( "CREATE DATABASE " + databaseNameFred );
+		} catch( PSQLException pe ) {
+			if( !"42P04".equals(pe.getSQLState() ) ) throw pe;	// 42P04 is "database already exists"
+		}
+	}
+	
+	/**
+	 * Drop table.
+	 *
+	 * @param statement the statement
+	 * @param tableName the table name
+	 * @throws Exception the exception
+	 */
+	private void dropTable( Statement statement, String tableName ) throws Exception {
+		try {
+			statement.execute( "DROP TABLE " + tableName );
+		} catch( PSQLException pe ) {
+			if( !"42P01".equals(pe.getSQLState() ) ) throw pe;	// 42P01 is "table doesn't exist"
+		}
+	}
+
 	/**
 	 * Empty bucket contents.
 	 *
